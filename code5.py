@@ -40,13 +40,19 @@ class hello:
 
         counter = 0
         for param in params:
-            if param == "name" or param == "trench" or param == "catalogid":
+            if param == "trench" or param == "year" or param == "excavator":
                 if len(params[param]) > 0 and differentiate == 0:
-                    query = query + param + " ILIKE " + "'%" + params[param] + "%'"
+                    if param == "year":
+                        query = query + param + " = " + params[param]
+                    else:
+                        query = query + param + " ILIKE " + "'%" + params[param] + "%'"
                     #print query
                     differentiate += 1
                 elif len(params[param]) > 0:
-                    query = query + " AND " + param +" ILIKE " + "'%" + params[param] + "%'"
+                    if param == "year":
+                        query = query + " AND " + param + " = " + params[param]
+                    else:
+                        query = query + " AND " + param +" ILIKE " + "'%" + params[param] + "%'"
                     #print query
                 counter += 1
 

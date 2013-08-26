@@ -1,0 +1,2243 @@
+<html>
+	  <head>
+	  	<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+	    <script src="ext-3.4.0/adapter/ext/ext-base.js" type="text/javascript"></script>
+		<script src="ext-3.4.0/ext-all.js"  type="text/javascript"></script>
+		<link rel="stylesheet" type="text/css" href="ext-3.4.0/resources/css/ext-all.css"></script>
+		<script src="OpenLayers-2.12/OpenLayers.js" type="text/javascript"></script>
+		<script src="GeoExt/lib/GeoExt.js" type="text/javascript"></script>
+		<link rel="stylesheet" type="text/css" href="GeoExt/resources/css/geoext-all-debug.css"></link>
+		
+	    <script>
+/******Declare general variables for use throught the application***********************************************************/
+	    	var apiKey = 'ArDhibMYOK8yVhWLV0L0lBhrXT6Eg2vJnEDCYqQ7t29ZiKNoJN_c00gVRoUOHSbE'
+	    	var initialTrenchLabelA = false;
+	    	var initialTrenchLabelB = true;
+	    	var test;
+	    	var mappedTrenches;
+	    	var artifactFeature;
+	    	var trenchFeature;
+	    	var mappedArtifacts;
+	    	var artifactGeomStore;
+	    	var queryTabs;
+	    	var drawControls;
+	    	var fieldDefs;
+	    	var store;
+	    	var features;
+	    	var currentFeature = new OpenLayers.Feature.Vector();
+	    	var vectorStore;
+	    	var toggleGroup = "artifactLabels";
+	    	var geojson_format = new OpenLayers.Format.GeoJSON({'internalProjection': new OpenLayers.Projection("EPSG:900913"),
+                											'externalProjection': new OpenLayers.Projection("EPSG:4326")
+            });
+	    	var kmlStringStart = '<![CDATA[';
+			var kmlStringEnd = ' ]]>';
+	    	var map;
+	    	var mapProject = new OpenLayers.Projection("EPSG:900913");
+	    	var displayProject = new OpenLayers.Projection("EPSG:4326");
+			var extent = new OpenLayers.Bounds(1268117.4140481,5335018.473688,1270219.4323257,5335641.9131998);
+			var toMap = window.location.search.substring(1).split(",");
+			console.log(toMap);
+			
+/*************************************************************************************************/   
+	    
+	    	
+/******Declare map controls into variable to be called into the map object************************/
+
+			var mapControls = {
+      		
+				projection: mapProject,
+				displayProjection: displayProject,
+				maxExtent: extent,
+				maxScale: 10000,
+				units: "dd",
+				scales: [10000, 5000, 2500, 1000],
+				numZoomLevels: 5
+				
+			};
+
+/******Printing Variables***********************************************************************/
+			
+			var printCapabilities = {
+    			"scales":[
+        			{"name":"25000"},
+        			{"name":"50000"},
+        			{"name":"100000"}
+    			],
+   	 			"dpis":[
+        			{"name":"190"},
+        			{"name":"254"}
+    			],
+    			"outputFormats":[
+        			{"name":"pdf"},
+        			{"name":"png"}
+    			],
+    			"layouts":[{
+            		"name":"A4 portrait",
+            		"map":{
+               			 "width":440,
+                		"height":483
+            		}
+        		}],
+    			"printURL":"http:\/\/localhost:5000\/print\/print.pdf",
+    			"createURL":"http:\/\/localhost:5000\/print\/create.json"
+			};
+			
+/******SETUP ANY FUNCTIONS OR VARIABLES FOR THE TOOLBAR*******/
+			
+			function hideWin(window)
+			{
+				if (window.isVisible())
+				{
+					window.hide();
+				}
+			};
+			
+			
+			function makeMapNumbers(layer)
+				{
+				var nummer = 1;
+					for(var i = 0; i < layer.features.length; i++)
+					{
+						if ( layer.features[i].renderIntent != "hidden")
+        					{
+        						layer.features[i].attributes.map_num = nummer;
+        					nummer++;
+        					}
+        					else 
+        					{
+        						layer.features[i].attributes.map_num ='';
+        					}
+    					}
+				
+			}; 
+
+        
+
+
+
+
+			
+			
+			var artifactKmlExport = function(layer){
+				for (var i = 0; i< layer.features.length; i++){
+					layer.features[i].attributes.kmlname = layer.features[i].attributes.catalogid;
+					var desString =[];
+					desString = desString+kmlStringStart;
+					//can't forget to start the table
+					desString = desString+'<table border="1">';
+					desString = desString + "<tr><td>Artifact ID:</td>"+ "<td>" + layer.features[i].attributes.catalogid + "</td></tr>";
+					//this should never not happen
+					
+				
+	
+					if (layer.features[i].attributes.name)
+					{
+						desString = desString +"<tr><td>Description:</td>"+ "<td>" + layer.features[i].attributes.name + "</td></tr>";
+					}
+	
+					if ( layer.features[i].attributes.fabric)
+					{
+						desString = desString +"<tr><td>Fabric:</td>"+ "<td>" + layer.features[i].attributes.fabric + "</td></tr>";
+					}
+	
+					if ( layer.features[i].attributes.chronology)
+					{
+						desString = desString + "<tr><td>Chronology:</td>"+ "<td>" + layer.features[i].attributes.chronology + "</td></tr>";
+					}
+	
+					if ( layer.features[i].attributes.trench)
+					{
+						desString = desString + "<tr><td>Trench:</td>"+ "<td>" + layer.features[i].attributes.trench + "</td></tr>";
+					}
+	
+					
+	
+				desString = desString + '</table>';
+				desString = desString + kmlStringEnd;
+				layer.features[i].attributes.description = desString;
+			
+			}
+				//kmlWin.show();
+	
+				//now we have to create a hidden form so the browser will download the .kml file.
+				var kmlex = new OpenLayers.Format.KML({
+					internalProjection: mapProject,
+                    //externalProjection: displayProject
+                 });
+				var kmlText = kmlex.write(layer.features);
+				var geoJSONTextEscape = encodeURI(kmlText);
+				var body = Ext.getBody();
+				var frame = body.createChild(
+				{
+					tag: 'iframe',
+					cls: 'x-hidden',
+					id: 'hidden_iframe',
+					name: 'hidden_iframe'
+				});
+
+				var form = body.createChild(
+				{
+    				tag: 'form',
+    				cls: 'x-hidden',
+    				id: 'hidden_form',
+    				method: 'POST',
+    				action: '/artifactskml/',
+    				target: '_blank'
+    			});
+
+				var input = form.createChild(
+				{
+    				tag: 'input',
+    				cls: 'x-hidden',
+    				id: 'hidden_input',
+    				name: 'jsondata',
+    				type: 'hidden',
+    				value: geoJSONTextEscape
+				});
+				form.dom.submit();
+		
+		};
+		
+		
+		var trenchKmlExport = function(layer){
+				for (var i = 0; i< layer.features.length; i++){
+					layer.features[i].attributes.kmlname = layer.features[i].attributes.trench;
+					var desString =[];
+					desString = desString+kmlStringStart;
+					//can't forget to start the table
+					desString = desString+'<table border="1">';
+					desString = desString + "<tr><td>Trench Area:</td>"+ "<td>" + layer.features[i].attributes.trencharea + "</td></tr>";
+					//this should never not happen
+					
+				
+	
+					if (layer.features[i].attributes.trenchnumb)
+					{
+						desString = desString +"<tr><td>Trench Number:</td>"+ "<td>" + layer.features[i].attributes.trenchnumb + "</td></tr>";
+					}
+	
+					if ( layer.features[i].attributes.year)
+					{
+						desString = desString +"<tr><td>Year:</td>"+ "<td>" + layer.features[i].attributes.year + "</td></tr>";
+					}
+	
+					if ( layer.features[i].attributes.trenchid)
+					{
+						desString = desString + "<tr><td>TrenchID:</td>"+ "<td>" + layer.features[i].attributes.trenchID + "</td></tr>";
+					}
+	
+					if ( layer.features[i].attributes.excavator)
+					{
+						desString = desString + "<tr><td>Excavator:</td>"+ "<td>" + layer.features[i].attributes.excavator + "</td></tr>";
+					}
+	
+					
+	
+				desString = desString + '</table>';
+				desString = desString + kmlStringEnd;
+				layer.features[i].attributes.description = desString;
+			
+			}
+				//kmlWin.show();
+	
+				//now we have to create a hidden form so the browser will download the .kml file.
+				var kmlex = new OpenLayers.Format.KML({
+					internalProjection: mapProject,
+                    //externalProjection: displayProject
+                 });
+				var kmlText = kmlex.write(layer.features);
+				var geoJSONTextEscape = encodeURI(kmlText);
+				var body = Ext.getBody();
+				var frame = body.createChild(
+				{
+					tag: 'iframe',
+					cls: 'x-hidden',
+					id: 'hidden_iframe',
+					name: 'hidden_iframe'
+				});
+
+				var form = body.createChild(
+				{
+    				tag: 'form',
+    				cls: 'x-hidden',
+    				id: 'hidden_form',
+    				method: 'POST',
+    				action: '/trencheskml/',
+    				target: '_blank'
+    			});
+
+				var input = form.createChild(
+				{
+    				tag: 'input',
+    				cls: 'x-hidden',
+    				id: 'hidden_input',
+    				name: 'jsondata',
+    				type: 'hidden',
+    				value: geoJSONTextEscape
+				});
+				form.dom.submit();
+		
+		};
+			
+			
+		
+			//General function that can be used to toggle layers on and off in the toolbar
+			var toggleLayer = function (layerName){
+				var layerToToggle = map.getLayersByName(layerName)[0];
+				if (layerToToggle.getVisibility() == true){
+					layerToToggle.setVisibility(false);
+				}
+				else if (layerToToggle.getVisibility() == false) {
+					layerToToggle.setVisibility(true);
+				}
+			};
+			
+			//General function for changing attribute to label on the map
+			function labelChanger(nLayer, attribute){
+				nLayer.styleMap.styles['default'].context = attribute;
+				nLayer.redraw();
+			}
+
+			//Below is the various variables used to represent each attribute for feature labels in the style object
+			
+			var artifactsNames = {
+				foo: function(feature){
+					return feature.attributes.name;
+				}
+			};
+			
+			var artifactMapNums = {
+				foo: function(feature){
+					return feature.attributes.map_num;
+				}
+			};
+			
+			var artifactsID = {
+				foo: function(feature){
+					return feature.attributes.catalogid;
+				}
+			};
+			
+			var none = {
+				foo: function(feature){
+					return ""
+				}
+			};
+			
+			var artifactsFabric = {
+				foo: function(feature){
+					return feature.attributes.fabric;
+				}
+				
+			};
+			
+			var artifactsChronology = {
+				foo: function(feature){
+					return feature.attributes.chronology;
+				}
+			};
+			
+			var trenchLabel = {
+				foo: function(feature){
+					return feature.attributes.trench;
+				}
+			};
+
+			var yearLabel = {
+				foo: function(feature){
+					return feature.attributes.year;
+				}
+			};
+			
+			var trenchMapNums = {
+				foo: function(feature){
+					return feature.attributes.map_num;
+				}
+			};
+			
+			//A template for the styling of artifacts
+			var artifactTemplate ={
+   				//this is the label- must be changed to a different variable for different languages
+   				pointRadius: .5, 
+				fillColor: 'red', 
+				strokeColor: 'black',
+   				label : "${foo}",
+   				fontColor: "black",
+   				fontSize: "10px",
+   				fontFamily: "Arial",
+   				fontWeight: "bold",
+   				labelAlign: "ct",
+   				labelXOffset : 0,
+   				labelYOffset : 15,
+   				labelSelect : true
+   			    
+   			};
+
+			//A template for the styling of trench features
+			var trenchTemplate ={
+   				//this is the label- must be changed to a different variable for different languages
+   				strokeColor: 'black',
+   				fillOpacity: .1,
+   				fillColor:'red',
+   				strokeWidth: .5,
+   				label : "${foo}",
+   				fontColor: "black",
+   				fontSize: "10px",
+   				fontFamily: "Arial",
+   				fontWeight: "bold",
+   				labelAlign: "ct",
+   				labelXOffset : 0,
+   				labelYOffset : 10,
+   				labelSelect : true
+   			};
+			
+/**********************************************************************************************/   			
+			
+	        
+	        
+/*****Create the Map and add various layers through OpenLayers***********************************/ 
+	       
+	        var pan = new OpenLayers.Control.PanZoomBar();
+      		var nav = new OpenLayers.Control.Navigation();
+			var mouse = new OpenLayers.Control.MousePosition();
+			var scaleLine = new OpenLayers.Control.ScaleLine();		
+			var keyboard = new OpenLayers.Control.KeyboardDefaults();
+			var measure = new OpenLayers.Control.Measure(OpenLayers.Handler.Path, {
+    			eventListeners: {
+        			measure: function(evt) {
+            			alert("The measurement was " + evt.measure + evt.units);
+        			}
+    			}
+			});
+	       
+	       //Creates a new map and assigns paramters from the controls variable
+	        var map = new OpenLayers.Map(mapControls);
+	        map.addControl(scaleLine);
+	        map.addControl(mouse);
+	        map.addControl(keyboard);
+	        map.addControl(nav);
+	        map.addControl(measure);
+	        measure.activate();
+	        measure.deactivate();
+	        //Creates a basemap layer using Open Street Maps
+	        //var OSM = new OpenLayers.Layer.OSM();
+
+			//Add layers to map
+			//map.addLayer(OSM);
+				
+			
+			// Bing's Road imagerySet
+			var road = new OpenLayers.Layer.Bing({
+    			key: apiKey,
+    			type: "Road"
+			});
+			// Bing's Aerial imagerySet
+			var aerial = new OpenLayers.Layer.Bing({
+    			key: apiKey,
+    			type: "Aerial"
+			});
+			// Bing's AerialWithLabels imagerySet
+			var hybrid = new OpenLayers.Layer.Bing({
+    			key: apiKey,
+    			type: "AerialWithLabels",
+    			name: "Bing Aerial With Labels"
+			});
+
+			map.addLayers([road, aerial, hybrid]);
+			map.addControl(new OpenLayers.Control.LayerSwitcher());
+			
+			
+			
+			var n_arrow = new OpenLayers.Layer.Vector("Compass rose and copyright", 
+                      {
+                      	displayInLayerSwitcher: false,
+                      	transparent: true,
+                      	'attribution': "<img src='images/compass2.png' width='50' height='50' align='right'/><br><br>"
+                      });
+                    
+			map.addLayer(n_arrow);
+			
+			
+			//Creates a new layer from the web gis service for OC1 building	that starts invisible	    
+			var oc1 = new OpenLayers.Layer.WMS("OC1", 
+				"http://poggiocivitate.classics.umass.edu:8090/geoserver/murlo/wms",
+				 {
+				 	layers:"oc1",
+				 	 transparent: true
+				 },
+				 {
+				 	visibility: false
+				 }
+			)
+			
+			//Add OC1 layer to map
+			map.addLayer(oc1);
+			
+			//Creates a new lyer from the web gis service for OC2 buildn that starts invisible
+			var oc2 = new OpenLayers.Layer.WMS("OC2", 
+				"http://poggiocivitate.classics.umass.edu:8090/geoserver/murlo/wms",
+				 {
+				 	layers:"oc2",
+				 	 transparent: true
+				 },
+				 {	
+				 	visibility: false
+				 }
+			)
+			
+			map.addLayer(oc2);
+			
+			//Creates a new layer from web gis service for OC3 building that starts invisible
+			var oc3 = new OpenLayers.Layer.WMS("OC3", 
+				"http://poggiocivitate.classics.umass.edu:8090/geoserver/murlo/wms",
+				 {
+				 	layers:"oc3",
+				 	 transparent: true
+				 },
+				 {
+				 	visibility: false
+				 }
+			)
+			
+			//Add layer to map
+			map.addLayer(oc3)
+	    	
+	    	//Ceates a new layer from web gis service for all oc buildings that start invisible
+	    	var oc = new OpenLayers.Layer.WMS("OC", 
+				"http://poggiocivitate.classics.umass.edu:8090/geoserver/murlo/wms",
+				 {
+				 	layers:'orientalizing complex',
+				 	 transparent: true
+				 	 
+				 },
+				 {
+				 	visibility: false
+				 }
+			)
+			
+			//Add layer to map
+			map.addLayer(oc)
+			
+			//Creates a new layer from web gis service for all trench polygons that starts invisible
+			var allTrenches = new OpenLayers.Layer.WMS("allTrenches", 
+				"http://poggiocivitate.classics.umass.edu:8090/geoserver/murlo/wms",
+				 {
+				 	layers:"trenchpolygonsllatt",
+				 	 transparent: true,
+				 },
+				 {
+				 	visibility: false
+				 }
+			)
+			
+			//Add layer to map
+			map.addLayer(allTrenches)
+			
+			//Create a vector layer to store features created using the draw tools
+			var drawLayer = new OpenLayers.Layer.Vector("Drawn Features");
+			
+			//Add layer to map
+			map.addLayer(drawLayer);
+			
+			editing = new OpenLayers.Control.EditingToolbar(drawLayer)
+			
+			map.addControl(editing);
+			
+			
+		
+			//Creates a vector layer to store artifact points as queried from the database		
+			var artifactsLayer = new OpenLayers.Layer.Vector(
+				"Artifacts", 
+				{styleMap:new OpenLayers.StyleMap(new OpenLayers.Style(
+					artifactTemplate,
+					{
+						context: none,
+   						rules : [
+      						new OpenLayers.Rule({
+            				name: " ",
+            				elseFilter: true,
+            				symbolizer: {
+            					pointRadius: 2, 
+								fillColor: 'red', 
+								strokeColor: 'black'
+            				}
+           					})
+           				]
+   					}
+				
+				))});
+			
+			//Add layer to map
+			map.addLayer(artifactsLayer);    
+	    	
+	    	
+	    	var trenchesLayer = new OpenLayers.Layer.Vector(
+	    		"Trenches", 
+	    		{styleMap: new OpenLayers.StyleMap(new OpenLayers.Style(
+	    			
+	    		trenchTemplate,
+	    		{
+	    			context: none,
+	    			rules : [
+      						new OpenLayers.Rule({
+            				name: " ",
+            				symbolizer:{
+            					strokeColor: 'black',
+   								fillOpacity: .1,
+   								fillColor:'red',
+   								strokeWidth: .5
+            				}
+            				
+           					})
+           				]
+	    		}))
+	    		});
+	    	
+	    	map.addLayer(trenchesLayer)
+	    
+	    	 
+            
+            
+/*********************************************************************************************************/	    	
+/*****SETUP BUTTONS FOR TOOLBAR***************************************************************************/
+	    	
+	    	//variable to house layer toggle options for toolbar
+	    	var tbLayers = [], action, actions = {};
+	    	
+	    
+	    	
+	    	//Action to toggle queried artifacts layer on and off
+	    	action = new Ext.form.Checkbox({
+	    				checked: true,
+        				boxLabel: "Artifacts",
+        				enableToggle: true,
+    					handler: function (toggled){
+    						if (toggled){
+    							toggleLayer("Artifacts")
+    						}
+    					},
+        				tooltip: "Toggle Artifact On and Off"
+    		});
+    		
+    		//Add action to toolbar
+    		actions["toggleArtifacts"] = action;
+    		tbLayers.push(action);
+    		
+    		//Action to toggle drawn features on and off
+	    	action = new Ext.form.Checkbox({
+	    				checked: true,
+        				boxLabel: "Drawn Features",
+        				enableToggle: true,
+    					handler: function(toggled){
+    						if (toggled){
+    							toggleLayer("Drawn Features")
+    						}
+    					},
+        				tooltip: "Toggle Drawn Features On and Off"
+    		});
+    		
+    		//Add action to toolbar
+    		actions["toggleDrawnFeatures"] = action;
+    		tbLayers.push(action);
+    		
+	    	action = new Ext.form.Checkbox({
+	    				checked: false,
+        				boxLabel: "OC1",
+        				enableToggle: true,
+    					handler: function(toggled){
+    						if (toggled){
+    							toggleLayer("OC1")
+    						}
+    					},
+        				tooltip: "Toggle Orientalizing Complex Building 1 On and Off"
+    		});
+    		
+    		//Action to toggle OC1 building on and off
+    		actions["toggleOC1"] = action;
+    		tbLayers.push(action);
+    		
+    		//Action to toggle OC2building on and off
+    		action = new Ext.form.Checkbox({
+	    				checked: false,
+        				boxLabel: "OC2",
+        				enableToggle: true,
+    					handler: function(toggled){
+    						if (toggled){
+    							toggleLayer("OC2")
+    						}
+    					},
+        				tooltip: "Toggle Orientalizing Complex Building 2 On and Off"
+    		});
+    		
+    		//Add action to toolbar
+    		actions["toggleOC2"] = action;
+    		tbLayers.push(action);
+    		
+    		//Action to toggle OC3 build on and off
+    		action = new Ext.form.Checkbox({
+	    				checked: false,
+        				boxLabel: "OC3",
+        				enableToggle: true,
+    					handler: function(toggled){
+    						if (toggled){
+    							toggleLayer("OC3")
+    						}
+    					},
+        				tooltip: "Toggle Orientalizing Complex Building 1 On and Off"
+    		});
+    		
+    		//Add action to toolbar
+    		actions["toggleOC3"] = action;
+    		tbLayers.push(action);
+    		
+    		//Action to toggle all OC builinds on and off 
+    		action = new Ext.form.Checkbox({
+	    				checked: false,
+        				boxLabel: "Orientalizing Complex",
+        				enableToggle: true,
+    					handler: function(toggled){
+    						if (toggled){
+    							toggleLayer("OC")
+    						}
+    					},
+        				tooltip: "Toggle Orientalizing Complex On and Off"
+    		});
+    
+    		//Add action to toolbar
+    		actions["toggleOC"] = action;
+    		tbLayers.push(action);
+    		
+    		//Action to toggle all trench polygons on and off
+    		action = new Ext.form.Checkbox({
+	    				checked: false,
+        				boxLabel: "All Trenches",
+        				enableToggle: true,
+    					handler: function(toggled){
+    						if (toggled){
+    							toggleLayer("allTrenches")
+    						}
+    					},
+        				tooltip: "Toggle Trench Polygons On and Off"
+    		});
+    		
+    		//Add action to toolbar
+    		actions["toggleAllTrenches"] = action;
+    		tbLayers.push(action);
+			
+			//Action to toggle queried trenches polygons on and off
+    		action = new Ext.form.Checkbox({
+	    				checked: true,
+        				boxLabel: "Mapped Trenches",
+        				enableToggle: true,
+    					handler: function(toggled){
+    						if (toggled){
+    							toggleLayer("Trenches")
+    						}
+    					},
+        				tooltip: "Toggle Mapped Trench Polygons On and Off"
+    		});
+    		
+    		//Add action to toolbar
+    		actions["toggleTrenches"] = action;
+    		tbLayers.push(action);
+    		
+    		exportTrenches = [], action, actions = {};
+    		
+			action = new Ext.menu.Menu({
+        				text: "As JSON",
+        				handler: function(){
+							var geoJSON = new OpenLayers.Format.GeoJSON();
+    						geoJSONText = geoJSON.write(trenchesLayer.features);
+							var geoJSONTextEscape = encodeURI(geoJSONText);
+							var body = Ext.getBody();
+							
+							var frame = body.createChild({
+    							tag: 'iframe',
+    							cls: 'x-hidden',
+    							id: 'hidden_iframe',
+    							name: 'hidden_iframe'
+							});
+
+							var form = body.createChild({
+    							tag: 'form',
+    							cls: 'x-hidden',
+    							id: 'hidden_form',
+    							method: 'post',
+    							action: '/trenchesjson/',
+    							target: '_blank'		
+							});
+
+							var input = form.createChild({
+    							tag: 'input',
+    							cls: 'x-hidden',
+    							id: 'hidden_input',
+    							name: 'jsondata',
+    							type: 'hidden',
+    							value: geoJSONTextEscape
+							});
+
+							form.dom.submit();
+
+
+ 						},	
+        				tooltip: "Export mapped trenches as JSON file"
+    		});
+    		
+    		//Add action to toolbar
+    		actions["exportJSON"] = action;
+    		exportTrenches.push(new Ext.menu.Item(action));
+    		
+    		action = new Ext.menu.Menu({
+        				text: "As CSV",
+        				handler: function(){
+        					console.log("check1");
+ 							var geoJSON = new OpenLayers.Format.GeoJSON();
+    						geoJSONText = geoJSON.write(trenchesLayer.features);
+							var geoJSONTextEscape = encodeURI(geoJSONText);
+							console.log(geoJSONTextEscape);
+							var body = Ext.getBody();
+							var frame = body.createChild({
+    							tag: 'iframe',
+    							cls: 'x-hidden',
+   	 							id: 'hidden_iframe',
+    							name: 'hidden_iframe'
+							});
+	
+							var form = body.createChild({
+    							tag: 'form',
+    							cls: 'x-hidden',
+    							id: 'hidden_form',
+    							method: 'post',
+    							action: '/trenchescsv/',
+    							target: '_blank'
+							});
+
+							var input = form.createChild({
+    							tag: 'input',
+    							cls: 'x-hidden',
+    							id: 'hidden_input',
+    							name: 'jsondata',
+    							type: 'hidden',
+    							value: geoJSONTextEscape
+							});
+
+							form.dom.submit();
+
+
+ 					},
+        			tooltip: "Export mapped artifacts as CSV file"
+    		});	
+    		
+    		//Add action to toolbar
+    		actions["exportCSV"] = action;
+    		exportTrenches.push(new Ext.menu.Item(action));
+    		
+    		action = new Ext.menu.Menu({
+        				text: "As KML",
+        				handler: function(){
+   							trenchKmlExport(trenchesLayer);
+ 						},
+        				tooltip: "Export mapped artifacts as KML file"
+    		});
+    		
+    		//Add action to toolbar
+    		actions["exportKML"] = action;
+    		exportTrenches.push(new Ext.menu.Item(action));
+
+    		
+    		exportArtifacts = [], action, actions = {};
+    		
+    		action = new Ext.menu.Menu({
+        				text: "As JSON",
+        				handler: function(){
+							var geoJSON = new OpenLayers.Format.GeoJSON();
+    						geoJSONText = geoJSON.write(artifactsLayer.features);
+							var geoJSONTextEscape = encodeURI(geoJSONText);
+							var body = Ext.getBody();
+							
+							var frame = body.createChild({
+    							tag: 'iframe',
+    							cls: 'x-hidden',
+    							id: 'hidden_iframe',
+    							name: 'hidden_iframe'
+							});
+
+							var form = body.createChild({
+    							tag: 'form',
+    							cls: 'x-hidden',
+    							id: 'hidden_form',
+    							method: 'post',
+    							action: '/artifactsjson/',
+    							target: '_blank'		
+							});
+
+							var input = form.createChild({
+    							tag: 'input',
+    							cls: 'x-hidden',
+    							id: 'hidden_input',
+    							name: 'jsondata',
+    							type: 'hidden',
+    							value: geoJSONTextEscape
+							});
+
+							form.dom.submit();
+
+
+ 						},
+        				tooltip: "Export mapped artifacts as JSON file"
+    		});
+    		
+    		//Add action to toolbar
+    		actions["exportJSON"] = action;
+    		exportArtifacts.push(new Ext.menu.Item(action));
+    		
+    		action = new Ext.menu.Menu({
+        				text: "As CSV",
+        				handler: function(){
+        					console.log("firing?");
+ 							var geoJSON = new OpenLayers.Format.GeoJSON();
+    						geoJSONText = geoJSON.write(artifactsLayer.features);
+							var geoJSONTextEscape = encodeURI(geoJSONText);
+							
+							console.log(geoJSONText);
+							console.log(geoJSONTextEscape);
+							var body = Ext.getBody();
+							var frame = body.createChild({
+    							tag: 'iframe',
+    							cls: 'x-hidden',
+   	 							id: 'hidden_iframe',
+    							name: 'hidden_iframe'
+							});
+	
+							var form = body.createChild({
+    							tag: 'form',
+    							cls: 'x-hidden',
+    							id: 'hidden_form',
+    							method: 'post',
+    							action: '/artifactscsv/',
+    							target: '_blank'
+							});
+
+							var input = form.createChild({
+    							tag: 'input',
+    							cls: 'x-hidden',
+    							id: 'hidden_input',
+    							name: 'jsondata',
+    							type: 'hidden',
+    							value: geoJSONTextEscape
+							});
+
+							form.dom.submit();
+
+
+ 					},
+        			tooltip: "Export mapped artifacts as CSV file"
+    		});	
+    		
+    		//Add action to toolbar
+    		actions["exportCSV"] = action;
+    		exportArtifacts.push(new Ext.menu.Item(action));
+    		
+    		action = new Ext.menu.Menu({
+        				text: "As KML",
+        				handler: function(){
+   							artifactKmlExport(artifactsLayer);
+ 						},
+        				tooltip: "Export mapped artifacts as KML file"
+    		});
+    		
+    		//Add action to toolbar
+    		actions["exportKML"] = action;
+    		exportArtifacts.push(new Ext.menu.Item(action));
+    		
+    		
+    	
+			//Button group for labels since we only want one on at a time    	
+    		var trenchLabels;
+    		trenchLabels 
+    		= new Ext.form.RadioGroup({
+    			id: "trenchLabels",
+    			xtype: "radiogroup",
+    			columns: 1,
+    			vertical: true,
+    			items: [{
+    				boxLabel: "Trench",
+    				name: "trenchLabels",
+    				onClick: function(e){
+    					labelChanger(trenchesLayer, trenchLabel)
+    				}
+    			},{
+    				boxLabel: "Year",
+    				name: "trenchLabels",
+    				onClick: function(e){
+    					labelChanger(trenchesLayer, yearLabel)
+    				}
+    			},{
+    				boxLabel: "Trench Numbers",
+    				name: "trenchLabels",
+    				onClick: function(e){
+    					makeMapNumbers(trenchesLayer)
+    					labelChanger(trenchesLayer, trenchMapNums)
+    				}
+    			},{
+    				boxLabel: "None",
+    				name: "trenchLabels",
+    				onClick: function(e){
+    					labelChanger(trenchesLayer, none)
+    				}
+    			}]
+    		});
+    	
+    		var labels = new Ext.form.RadioGroup({
+    			id: "artifactLabels",
+    			xtype: "radiogroup",
+    			columns: 1,
+    			vertical: true,
+    			items:[{
+    				boxLabel: "Names",
+    				name: "artLabels",
+    				onClick: function(e){
+    						labelChanger(artifactsLayer, artifactsNames)
+    				}
+    				
+    			},{
+    				boxLabel: "ID's",
+    				name: "artLabels",
+    				onClick: function(e){
+    						labelChanger(artifactsLayer, artifactsID)
+    				}
+    				
+    			},{
+    				boxLabel: "Fabric",
+    				name: "artLabels",
+    				onClick: function(e){
+    					labelChanger(artifactsLayer, artifactsFabric)
+    				}
+    			},{
+    				boxLabel: "Chronology",
+    				name: "artLabels",
+    				onClick: function(e){
+    					labelChanger(artifactsLayer, artifactsChronology)
+    				}
+    			},{
+    				boxLabel: "Artifact Number",
+    				name: "artLabels",
+    				onClick: function(e){
+    					makeMapNumbers(artifactsLayer);
+    					labelChanger(artifactsLayer, artifactMapNums);
+    				}
+    			},{
+    				boxLabel: "None",
+    				name: "artLabels",
+    				onClick: function(e){
+    					labelChanger(artifactsLayer, none)
+    				}
+    			
+    			}]
+    		});
+ 
+/************************************************************************************************/
+/******THE MAIN FUNCTION THAT HOUSES THE ENTIRE INTERFACE****************************************/
+	    	
+	    	Ext.onReady(function() {		
+			
+				Ext.Ajax.request({
+					url : '/toMap/',
+    				method: 'GET',
+    				params : {
+        				toMap : toMap
+    						},
+    				//if everything works add the features to a store that the user can choose from
+    				success: function(objServerResponse){
+    					artifactGeomStore.loadData(geojson_format.read(objServerResponse.responseText));
+    				},
+    				failure : function(objServerResponse){ 
+    								
+
+    				}
+				})
+				
+				
+/******VARIABLES THAT NEED TO BE SET UP FOR FIELD ATTRIBUTES, PRINTING, STORES, FUNCTIONS, ETC***************************/
+				
+				var legendStore = new GeoExt.data.LayerStore({});
+				var legendPanel = new GeoExt.LegendPanel({});
+				
+				
+				
+				
+				// The printProvider that connects us to the print service
+    			var printProvider;
+    			printProvider = new GeoExt.data.PrintProvider({
+        			method: "POST", // "POST" recommended for production use
+        			capabilities: printCapabilities,
+        			customParams: {
+            		mapTitle: "Printing Demo",
+            		comment: "This is a simple map printed from GeoExt."
+		        }})
+				
+				 var printPage = new GeoExt.data.PrintPage({
+        			printProvider: printProvider
+
+				});
+								
+				//Fields that will be used for queried artifacts	
+				artifactFields =[
+            		{name: 'catalogid', type: 'string'},
+            		{name: 'trench', type: 'string'},
+            		{name: 'name', type: 'string'},
+            		{name: 'fabric', type: 'string'},
+            		{name: 'chronology', type: 'string'}
+            
+            	];
+				
+				//Fields that will be used for queried trench polygons
+				trenchFields = [
+					{name: 'trench', type: 'string'},
+					{name: 'trencharea', type: 'string'},
+					{name: 'trenchnumb', type: 'string'},
+					{name: 'year', type: 'string'},
+					{name: 'trenchid', type: 'string'},
+					{name: 'excavator', type: 'string'}	
+				];
+				
+					//Stores queried artifacts attributes for the grid
+    		 	artifactAttStore = new GeoExt.data.FeatureStore({
+    				fields: artifactFields
+    				
+    			});
+    		
+    			//Stores and links queried artifact's geometries from the map to the attribute grid 
+    			artifactGeomStore = new GeoExt.data.FeatureStore({
+            		title: 'Artifacts',
+        			layer: artifactsLayer,
+        			fields: artifactFields,
+            		autoLoad: false
+            	});
+				
+    			//Make sure this is cleared to start
+    			artifactGeomStore.removeAll();
+    			
+    			//Stores queried artifacts attributes for the grid
+    		 	var trenchAttStore = new GeoExt.data.FeatureStore({
+    				fields: trenchFields
+    				
+    			});
+    		
+    			//Stores and links queried artifact's geometries from the map to the attribute grid 
+    			 trenchGeomStore = new GeoExt.data.FeatureStore({
+            		title: 'Features',
+        			layer: trenchesLayer,
+        			fields: trenchFields,
+            		autoLoad: false
+            	});
+				
+    			//Make sure this is cleared to start
+    			trenchGeomStore.removeAll();	
+    				
+				
+				//Function that sends a url request to the server to query the database and returns geojson
+    			function fn_submitForm(button,event){
+					if (queryTabs.getActiveTab().title == "Artifacts"){
+						//clear the store and the visual display
+						artifactAttStore.removeAll();
+						//var geoJSON = new OpenLayers.Format.GeoJSON();
+						 //geoJSONText = geoJSON.write(currentFeature.geometry);
+						var f = Ext.getCmp('artifactForm');
+						var nameParam = artifactForm.getForm().findField("artifactName").getValue();
+      					var trenchParam = artifactForm.getForm().findField("artifactTrench").getValue();
+      					var yearParam = artifactForm.getForm().findField("artifactYear").getValue();
+      					var distParam = artifactForm.getForm().findField("artifactDist").getValue();
+      					var distFeatureParam = artifactForm.getForm().findField("artifactDistFeature").getValue();
+      					var mappedArtifacts = [];
+      					var rows = artifactGeomStore.getCount();
+       					for (var i = 0; i < rows; i++){
+       						var artifactInfo = artifactGeomStore.getAt(i);
+            				mappedArtifacts.push(artifactInfo.get("catalogid"));
+      					} 
+      					var mappedTrenchesParam = [];
+      					var rows = trenchGeomStore.getCount();
+      					for (var i = 0; i < rows; i++){
+      						var trenchInfo = trenchGeomStore.getAt(i);
+      						mappedTrenchesParam.push(trenchInfo.get("trench"));
+      					}
+      					
+      					
+					}
+   					else if (queryTabs.getActiveTab().title == "Trenches"){
+   						//clear the store and the visual display
+						trenchAttStore.removeAll();
+   						var f = Ext.getCmp('trenchForm');
+   						var trenchParam = trenchForm.getForm().findField("trenchTrench").getValue();
+      					var yearParam = trenchForm.getForm().findField("trenchYear").getValue();
+      					var excavatorParam = trenchForm.getForm().findField("trenchExcavator").getValue();
+      					var distParam = trenchForm.getForm().findField("trenchDist").getValue();
+      					var distFeatureParam = trenchForm.getForm().findField("trenchDistFeature").getValue();
+      					var mappedArtifacts = [];
+      					var rows = artifactGeomStore.getCount();
+       					for (var i = 0; i < rows; i++){
+       						var artifactInfo = artifactGeomStore.getAt(i);
+            				mappedArtifacts.push(artifactInfo.get("catalogid"));
+      					} 
+      					var mappedTrenchesParam = [];
+      					var rows = trenchGeomStore.getCount();
+      					for (var i = 0; i < rows; i++){
+      						var trenchInfo = trenchGeomStore.getAt(i);
+      						mappedTrenchesParam.push(trenchInfo.get("trench"));
+      					}
+      					
+   					};
+   					if (f.getForm().isValid() == true){
+   						if (queryTabs.getActiveTab().title == "Artifacts" && resultsTabs.getActiveTab().title != "Artifacts"){
+   							resultsTabs.setActiveTab(0);
+   						}
+   						else if (queryTabs.getActiveTab().title == "Trenches" && resultsTabs.getActiveTab().title != "Trenches"){
+   							resultsTabs.setActiveTab(1);
+   						};
+   						if (queryTabs.getActiveTab().title == "Artifacts"){
+       						Ext.Ajax.request({
+    							url : '/geojson1/',
+    							method: 'GET',
+    							params : {
+        							name : nameParam,
+        							trench : trenchParam,
+        							catalogid: yearParam,
+        							dist: distParam,
+        							distFeature: distFeatureParam,
+        							mappedArts: mappedArtifacts,
+        							mappedTrenches: mappedTrenchesParam
+    							},
+    							//if everything works add the features to a store that the user can choose from
+    							success: function(objServerResponse){
+    								artifactAttStore.loadData(geojson_format.read(objServerResponse.responseText));
+    								artifactResultsCount.setValue("Total Artifacts Found: " + artifactResults.getStore().getCount().toString())
+    							},
+    							failure : function(objServerResponse){ 
+    								
+
+    							}
+							})
+							if (artifactResults.getStore().getCount() == 0){
+								artifactResultsCount.setValue("Total Artifacts Found:  0")
+
+							}
+
+						}
+						if (queryTabs.getActiveTab().title == "Trenches"){
+       						Ext.Ajax.request({
+    							url : '/geojson2/',
+    							method: 'GET',
+    							params : {
+        							trench : trenchParam,
+        							year : yearParam,
+        							excavator: excavatorParam,
+        							dist: distParam,
+        							distFeature: distFeatureParam,
+        							mappedArts: mappedArtifacts,
+        							mappedTrenches: mappedTrenchesParam
+    							},
+    							//if everything works add the features to a store that the user can choose from
+    							success: function(objServerResponse){
+    								trenchAttStore.loadData(geojson_format.read(objServerResponse.responseText));
+    								trenchResultsCount.setValue("Total Trenches Found: " + trenchResults.getStore().getCount().toString())
+    							},
+    							failure : function(objServerResponse){ 
+
+    							}
+							})
+							if (trenchResults.getStore().getCount() == 0){
+								trenchResultsCount.setValue("Total Trenches Found:  0")
+
+							}
+						}
+					}
+				};
+				
+/*************************************************************************************************************/
+/******CENTER PANEL THAT HOUSES THE MAP AND THE TOOLBARS******************************************************/
+
+				//The panel that holds the map
+	        	var mapPanel = new GeoExt.MapPanel({
+	        		renderTo: mainWin,
+					region: 'center',
+					height: 300,
+					width: 900,
+					map: map,
+					id: "map",
+					extent: extent,
+					collapsible: true,
+					title: 'Map',
+					tbar: [{
+						xtype: 'button',
+						text: 'Original Extent',
+						border: 10,
+						handler: function(){
+							map.zoomToExtent(extent)
+						}
+					},{
+						xtype: 'tbseparator'
+					},{
+						text: 'File',
+						menu: new Ext.menu.Menu({
+							items: [{
+								text:"Export Artifacts",
+								menu: new Ext.menu.Menu({
+									items:[exportArtifacts]
+								})
+								
+							},{
+								text: "Export Trenches",
+								menu: new Ext.menu.Menu({
+									items: [exportTrenches]
+								})
+							}]
+						})
+					},{
+						xtype: 'tbseparator'
+					},{
+						text: 'Layers',
+						menu: new Ext.menu.Menu({
+							items: [tbLayers]
+						})
+					},{
+						xtype: 'tbseparator'
+					},{
+						text: 'Artifact Labels',
+						menu: new Ext.menu.Menu({
+							items: [labels]
+						})
+					},{
+						xtype: 'tbseparator'					
+					},{
+						text: "Trench Labels",
+						menu: new Ext.menu.Menu({
+							items: [trenchLabels]
+						})
+					},{
+						xtype: 'tbseparator'
+					},{
+						xtype: 'button',
+						text: 'Measure Distance',
+    					enableToggle: true,
+    					handler: function(toggled){
+	        				if (measure.active == false) {
+	        					console.log("On");
+	        					editing.deactivate();
+            					measure.activate();
+        					} else if (measure.active == true){
+        						console.log("Off");
+            					measure.deactivate();
+            					editing.activate();
+        					}
+    					}
+					},{
+						xtype: 'tbseparator'
+					},{
+						xtype: 'button',
+						text: 'Map Legend',
+						 handler: function() {
+             				legendStore = new GeoExt.data.LayerStore({
+    							layers: [
+    							artifactsLayer,
+    							trenchesLayer,
+    							]
+						});
+
+             			legendPanel = new GeoExt.LegendPanel({
+             				name: "legend",
+    						layerStore: legendStore,
+    						autoScroll: true,
+    						//region: 'south',
+    						//height: 100,
+    						//width: 100,
+    						dynamic: true,
+    						defaults: {
+    							//hideLabel: true,
+    							style: 'padding:5px',
+    							baseParams: {
+    							
+    								FORMAT: 'image/png',
+    								LEGEND_OPTIONS: 'forceLabels:on'
+  	 				 			}
+    						}
+						});
+
+						legendWin = new Ext.Window({
+							//	id: 'legendWin',
+							width: 250,
+							height: 300,
+							resizable: true,
+							maximizable: true,
+							title: 'Map Legend',
+							layout: 'fit',
+							items: legendPanel,
+							closeAction:'hide',
+							listeners:
+								{
+								'deactivate':function()
+									{
+									legendWin.hide();
+									}
+								}
+						});
+
+  						legendWin.addButton(
+  						{
+  							text: "Close",
+  							handler: function()
+  							{
+  								hideWin(legendWin);
+  							}
+  						}); 
+
+  	
+            
+    					legendWin.show();
+            			}
+					},{
+						xtype: 'tbseparator'
+					},{
+						xtype: 'button',
+            			text: "Print",
+            			handler: function() {
+                			// convenient way to fit the print page to the visible map area
+                			printPage.fit(mapPanel, true);
+                			// print the page, optionally including the legend
+                			printProvider.print(mapPanel, printPage);
+            			}
+					},
+					{
+						xtype: 'tbseparator'
+					}]
+				});	
+/***********************************************************************************************************/
+
+/******INTERFACE PANEL THAT STRORES THE FEATURES WHICH ARE CURRENTLY ADDED TO THE MAP***********************/
+			
+    			//Bottom Panels that stores the artifact and trench attribute grids
+             	var  mappedArtifacts = new Ext.grid.GridPanel({
+        			buttonAlign :'left',
+        			autoScroll: true,
+        			forceFit: true,
+        			store: artifactGeomStore,
+        			title: "Artifacts",
+        			region: 'center',
+        			height: 250,
+        			columns: [{
+            			header: "ArtifactID",
+            			width: 150,
+            			dataIndex: "catalogid",
+            			sortable: true
+            		},{
+        				header: "Name",
+            			width: 250,
+            			dataIndex: "name",
+            			sortable: true
+            		},{
+        				header: "Fabric",
+            			width: 150,
+            			dataIndex: "fabric",
+            			sortable: true
+            		},{
+        				header: "Chronology",
+            			width: 150,
+            			dataIndex: "chronology",
+            			sortable: true
+            		},{
+        				header: "Trench",
+            			width: 100,
+            			dataIndex: "trench",
+            			sortable: true
+            		}
+            		],
+            		sm: new GeoExt.grid.FeatureSelectionModel()
+    			});
+    
+    
+    			var  mappedTrenches = new Ext.grid.GridPanel({
+        			buttonAlign :'left',
+        			forceFit: true,
+        			autoScroll: true,
+        			store: trenchGeomStore,
+        			title: "Trenches",
+        			region: 'center',
+        			height: 250,
+        			columns: [{
+            			header: "Trench",
+            			width: 150,
+            			dataIndex: "trench",
+            			sortable: true
+            		},{
+        				header: "Trench Area",
+            			width: 250,
+            			dataIndex: "trencharea",
+            			sortable: true
+            		},{
+        				header: "Trench Number",
+            			width: 150,
+            			dataIndex: "trenchnumb",
+            			sortable: true
+            		},{
+        				header: "Year",
+            			width: 150,
+            			dataIndex: "year",
+            			sortable: true
+            		},{
+        				header: "Trench ID",
+            			width: 100,
+            			dataIndex: "trenchid",
+            			sortable: true
+            		},{
+        				header: "Excavator",
+            			width: 100,
+            			dataIndex: "excavator",
+            			sortable: true
+            		}
+            		],
+            		sm: new GeoExt.grid.FeatureSelectionModel()
+    			});
+    			
+				//Tab panel that stores the two different grids
+    			var mappedFeaturesTabs = new Ext.TabPanel({
+					region: "center",
+        			activeTab: 0,
+        			});
+            	
+            	//Add individual tabs to panel	
+            	mappedFeaturesTabs.add(mappedArtifacts);
+            	mappedFeaturesTabs.add(mappedTrenches);
+
+				//Panel to store tab panel -- main bottom panel for mapped feature attribute grids
+    			var mappedFeatures = new Ext.Panel({
+    				buttonAlign :'left',
+        			forceFit: true,
+        			//store: vectorStore,
+        			title: "Mapped Features",
+        			autoScroll: true,
+        			region: 'south',
+        			collapsible: true,
+        			height: 250,
+        			items: [mappedFeaturesTabs]
+    			});
+
+				//Button to delete a single feature from map 
+				mappedFeatures.addButton({
+					text: "Delete Feature",
+					handler: function(){
+						if (mappedFeaturesTabs.getActiveTab().title == "Artifacts"){
+							mappedArtifacts.getSelectionModel().each(function(rec){
+							var feature = rec.get("feature");
+							artifactsLayer.removeFeatures([feature]);
+            				//the following deletes the popup that we default to with a feature selection
+          					//map.removePopup(feature.popup);
+            				//feature.popup.destroy();
+            				//delete feature.popup; 
+            				})
+   						}
+   						else if (mappedFeaturesTabs.getActiveTab().title == "Trenches"){
+   							mappedTrenches.getSelectionModel().each(function(rec){
+							var feature = rec.get("feature");
+							trenchesLayer.removeFeatures([feature]);
+            				//the following deletes the popup that we default to with a feature selection
+          					//map.removePopup(feature.popup);
+            				//feature.popup.destroy();
+            				//delete feature.popup; 
+            				})
+   						};
+						
+        			},
+        			autoScroll: true
+    			});
+
+				//Button to delete all features on the map
+				mappedFeatures.addButton({
+    	    		text: "Delete All Features",
+    				handler: function() {
+    					if (mappedFeaturesTabs.getActiveTab().title == "Artifacts"){
+    						artifactsLayer.removeAllFeatures();
+    					}
+    					else if (mappedFeaturesTabs.getActiveTab().title == "Trenches"){
+    						trenchesLayer.removeAllFeatures();
+    					}
+    				},
+    				autoScroll: true
+        		});  
+
+
+				mappedFeatures.addButton({
+    	  			text: "Hide / Show Feature",
+    	  			handler: function() {
+    	  				if (mappedFeaturesTabs.getActiveTab().title == "Artifacts"){
+    	  					mappedArtifacts.getSelectionModel().each(function(rec) {
+            				var feature = rec.getFeature();
+            				if (feature.renderIntent == "hidden")
+            				{
+								feature.style = OpenLayers.Feature.Vector.style[artifactTemplate];
+								feature.renderIntent = "default";
+							}
+            				else
+            				{
+            					feature.renderIntent = "hidden";
+								feature.style = OpenLayers.Feature.Vector.style["delete"];
+             					//map.removePopup(feature.popup);
+            					//feature.popup.destroy();
+            					//delete feature.popup;
+            				}
+            				artifactsLayer.drawFeature(feature);
+            				})
+            			}
+            			else if (mappedFeaturesTabs.getActiveTab().title == "Trenches"){
+            				mappedTrenches.getSelectionModel().each(function(rec) {
+            				var feature = rec.getFeature();
+            				if (feature.renderIntent == "hidden")
+            				{
+								feature.style = OpenLayers.Feature.Vector.style[trenchTemplate];
+								feature.renderIntent = "default";
+							}
+            				else
+            				{
+            					feature.renderIntent = "hidden";
+								feature.style = OpenLayers.Feature.Vector.style["delete"];
+             					//map.removePopup(feature.popup);
+            					//feature.popup.destroy();
+            					//delete feature.popup;
+            				}
+            				trenchesLayer.drawFeature(feature);
+            				})
+            			}
+            		}
+        		});
+        		
+        		mappedFeatures.addButton({
+    				text: 'Hide All Features',
+    				handler: function(toggled){
+        				if (toggled) {
+        					if (mappedFeaturesTabs.getActiveTab().title == "Artifacts"){
+        
+        						for (var i = 0; i < artifactsLayer.features.length; i++)
+       			 				{
+        							artifactsLayer.features[i].renderIntent = "hidden";
+        							artifactsLayer.features[i].style = OpenLayers.Feature.Vector.style["delete"];
+        							artifactsLayer.drawFeature(artifactsLayer.features[i]);
+        						}
+        					}
+        					if (mappedFeaturesTabs.getActiveTab().title == "Trenches"){
+        						for (var i = 0; i < trenchesLayer.features.length; i++)
+       			 				{
+        							trenchesLayer.features[i].renderIntent = "hidden";
+        							trenchesLayer.features[i].style = OpenLayers.Feature.Vector.style["delete"];
+        							trenchesLayer.drawFeature(trenchesLayer.features[i]);
+        						}
+        					}
+        				} //end of toggled 
+        				else {
+            				length.deactivate();
+        				}
+    				}
+				});
+ 				
+ 				mappedFeatures.addButton({
+    				text: 'Show All Features',
+    				handler: function(toggled){
+        				if (toggled) {
+        					if (mappedFeaturesTabs.getActiveTab().title == "Artifacts"){
+        						for (var i = 0; i < artifactsLayer.features.length; i++)
+        						{
+        							artifactsLayer.features[i].style = OpenLayers.Feature.Vector.style[artifactTemplate];
+        							artifactsLayer.features[i].renderIntent = "default";
+        							artifactsLayer.drawFeature(artifactsLayer.features[i]);
+        						}
+        					}
+        				}
+        				if (mappedFeaturesTabs.getActiveTab().title == "Trenches"){
+        					for (var i = 0; i < trenchesLayer.features.length; i++)
+        						{
+        							trenchesLayer.features[i].style = OpenLayers.Feature.Vector.style[trenchTemplate];
+        							trenchesLayer.features[i].renderIntent = "default";
+        							trenchesLayer.drawFeature(trenchesLayer.features[i]);
+        						}
+        					}	 
+        				else {
+            				length.deactivate();
+        				}
+    				}
+				});
+
+				mappedFeatures.addButton(
+				{
+					text: 'Number Map Features',
+					handler: function(toggled)
+					{
+						if (toggled)
+						{
+							if (mappedFeaturesTabs.getActiveTab().title == "Artifacts"){
+								makeMapNumbers(artifactsLayer);
+								artifactGeomStore.loadData(artifactsLayer.features, false)
+								labelChanger(artifactsLayer, artifactMapNums);
+								
+							}
+							else if (mappedFeaturesTabs.getActiveTab().title == "Trenches"){
+								makeMapNumbers(trenchesLayer);
+								trenchGeomStore.loadData(trenchesLayer.features, false)
+								labelChanger(trenchesLayer, trenchMapNums);
+								
+							}
+						} 
+						else
+						{
+							length.deactivate();
+						}
+					}
+				});
+ 						
+ 						
+ 				//Zoom to trench if it is double clicked in the bottom grid
+				mappedArtifacts.on('rowdblclick', function(){
+            		var totalBounds;
+                	mappedArtifacts.getSelectionModel().each(function(rec){
+                		artifactFeature = rec.get("feature");
+	            		map.setCenter(new OpenLayers.LonLat(artifactFeature.geometry.x,artifactFeature.geometry.y),18);
+					});
+     			});
+ 						
+ 				//Zoom to artifact if it is double clicked in the bottom grid
+				mappedTrenches.on('rowdblclick', function(){
+            		var totalBounds;
+                	mappedTrenches.getSelectionModel().each(function(rec){
+                		trenchFeature = rec.get("feature");
+	            		map.setCenter(new OpenLayers.LonLat(trenchFeature.geometry.getCentroid().x,trenchFeature.geometry.getCentroid().y),18);
+					});
+     			});
+  
+  				 				
+   			
+/*****************************************************************************************************************/
+   				
+/******INTERFACE PANEL THAT IS USED TO GATHER PARAMETERS FOR QUERYING THE DATABASE*********************************/   				
+
+		
+    			var artifactForm = new Ext.FormPanel({
+    				title: "Artifacts",
+    				layout: 'form',
+    				align: 'center',
+    				autoScroll: true,
+                	buttonAlign :'left',
+                	url:'/geojson1/',
+    				region: "center",
+    				id: "artifactForm",
+    				items:[{
+    					xtype: 'container',
+    					layout: 'form',
+    					style: "padding-left:5px;",
+    					items:[{
+    						xtype: 'spacer',
+    						height: '8px'
+    					},{
+    						xtype: "label",
+    						text: "Attributes",
+    						style: 'font-size: 16px; text-decoration:underline; padding-left:5px',
+    					},{
+    						xtype: 'spacer',
+    						height: '12px'
+    					},{
+        					xtype: "textfield",
+        					name: "artifactName",
+        					emptyText: "Type",
+        					id: "artifactName",
+        					hideLabel: true
+    					},{
+    						xtype: 'spacer',
+    						
+    						height: '5px'
+    					},{
+        					xtype: "textfield",
+        					name: "artifactTrench",
+        					emptyText: "Trench",
+        					id: "artifactTrench",
+        					hideLabel: true
+    					},{
+    						xtype: 'spacer',
+    						height: '5px'
+    					},{
+        					xtype: "textfield",
+        					name: "artifactYear",
+        					emptyText: "Excavation Year",
+        					id: "artifactYear",
+        					hideLabel: true,
+        				},{
+    						xtype: 'spacer',
+    						height: '12px'
+        				},{
+    						xtype: "label",
+    						text: "Within",
+    						style: 'font-size: 16px; text-decoration:underline; padding-left:5px;'
+    					},{
+    						xtype: 'spacer',
+    						height: '12px'
+    					},{
+        					xtype: "textfield",
+        					name: "formDist",
+        					emptyText: "Meters",
+        					id: "artifactDist",
+        					hideLabel: true,
+        				},{
+    						xtype: 'spacer',
+    						height: '5px'
+    					},{
+        					xtype: "combo",
+        					name: "formFeature",
+        					emptyText: "From",
+        					id: "artifactDistFeature",
+        					editable: true,
+        					forceSelection: true,
+        					hideLabel: true,
+        					store: ["None","Mapped Artifacts", "Orientalizing Architecture","Mapped Trenches"]
+        				},{
+    					xtype: 'spacer',
+    					height: '12px'
+        				}]
+    				}],    				
+    				keys: [{ key: [Ext.EventObject.ENTER], handler: fn_submitForm }
+					]
+				});
+
+
+    		
+    			var trenchForm = new Ext.FormPanel({
+       				title: "Trenches",
+       				autoScroll: true,
+       				layout: 'form',
+    				align: 'center',
+                	buttonAlign :'left',
+                	url:'/geojson2/',
+    				region: "center",
+    				id: 'trenchForm',
+    				items:[{
+    					xtype: 'container',
+    					layout: 'form',
+    					style: "padding-left:5px;",
+    					items:[{
+    						xtype: 'spacer',
+    						height: '8px'
+    					},{
+    						xtype: "label",
+    						text: "Attributes",
+    						style: 'font-size: 16px; text-decoration:underline; padding-left:5px',
+    					},{
+    						xtype: 'spacer',
+    						height: '12px'
+    					},{
+        					xtype: "textfield",
+        					name: "trenchTrench",
+        					emptyText: "Trench",
+        					id: "trenchTrench",
+        					hideLabel: true
+    					},{
+    						xtype: 'spacer',
+    						height: '5px'
+    					},{
+        					xtype: "textfield",
+        					name: "trenchYear",
+        					emptyText: "Year",
+        					id: "trenchYear",
+        					hideLabel: true
+    					},{
+    						xtype: 'spacer',
+    						height: '5px'
+    					},{
+        					xtype: "textfield",
+        					name: "trenchExcavator",
+        					emptyText: "Excavated By",
+        					id: "trenchExcavator",
+        					hideLabel: true,
+        				},{
+    						xtype: 'spacer',
+    						height: '12px'
+        				},{
+    						xtype: "label",
+    						text: "Within",
+    						style: 'font-size: 16px; text-decoration:underline; padding-left:5px;'
+    					},{
+    						xtype: 'spacer',
+    						height: '12px'
+    					},{
+        					xtype: "textfield",
+        					name: "formDist",
+        					emptyText: "Meters",
+        					id: "trenchDist",
+        					hideLabel: true,
+        				},{
+    						xtype: 'spacer',
+    						height: '5px'
+    					},{
+        					xtype: "combo",
+        					name: "Feature",
+        					emptyText: "From",
+        					id: "trenchDistFeature",
+        					editable: true,
+        					forceSelection: true,
+        					hideLabel: true,
+        					store: ["None","Mapped Artifacts","Archaic Architecture", "Orientalizing Architecture","Mapped Trenches"]
+        				},{
+    					xtype: 'spacer',
+    					height: '12px'
+        				}]
+    				}],    				
+    				keys: [{ key: [Ext.EventObject.ENTER], handler: fn_submitForm }
+					]
+				});
+
+
+				//Left panel with search formS	    		
+				var artifactPanel = new Ext.Panel({
+    				region: "center",
+    				items: [artifactForm]
+				});
+				
+				var trenchPanel = new Ext.Panel({
+    				region: "center",
+    				items: [trenchForm]
+				});
+
+				 queryTabs = new Ext.TabPanel({
+    				region: "center",
+        			activeTab: 0,
+            		});
+				queryTabs.add(artifactForm);
+				queryTabs.add(trenchForm);
+				 
+				var queryPanel = new Ext.Panel({
+    				layout: "border",
+        			title: 'Query Features',
+    				region: "west",
+    				buttonAlign: "left",
+    				width: 275,
+    				collapsible: true,
+    				items: [queryTabs]
+				});
+
+
+				queryPanel.addButton({
+    				text: "search",
+    				handler: fn_submitForm,
+    				scope: queryPanel
+				});
+
+
+/**********************************************************************************************************************/    			
+
+/******INTERFACE PANEL THAT STORES THE RESULTS FROM A QUERY AND ALLOWS THE USER TO ADD THEM TO THE MAP******************/
+
+				artifactResults = new Ext.grid.GridPanel({
+    				title: "Artifacts",
+    				forceFit: true,
+    				region:"center",
+    				store: artifactAttStore,
+     				columns: [{
+            			header: "Name",
+            			width: 100,
+            			dataIndex: "name",
+            			sortable: true
+            		},{
+            			header: "ArtifactID",
+            			width: 100,
+            			dataIndex: "catalogid",
+            			sortable: true
+            		},{
+            			header: "Trench",
+            			width: 100,
+            			dataIndex: "trench",
+            			sortable: true
+            		}],
+    				sm: new GeoExt.grid.FeatureSelectionModel()
+				});
+
+    			trenchResults = new Ext.grid.GridPanel({
+    				title: "Trenches",
+    				forceFit: true,
+    				region:"center",
+    				store: trenchAttStore,
+    				
+     				columns: [{
+            			header: "Trench",
+            			width: 100,
+            			dataIndex: "trench",
+            			sortable: true
+            		},{
+            			header: "Year",
+            			width: 100,
+            			dataIndex: "year",
+            			sortable: true
+            		},{
+            			header: "Excavator",
+            			width: 100,
+            			dataIndex: "excavator",
+            			sortable: true
+            		}],
+    				sm: new GeoExt.grid.FeatureSelectionModel()
+				});
+
+				
+//Zoom to trench if it is double clicked in the bottom grid
+				artifactResults.on('rowdblclick', function(){
+            		var totalBounds;
+                	artifactResults.getSelectionModel().each(function(rec){
+                		artifactFeature = rec.get("feature");
+                		artifactsLayer.addFeatures([artifactFeature]);
+	            		map.setCenter(new OpenLayers.LonLat(artifactFeature.geometry.x,artifactFeature.geometry.y),18);
+					});
+     			});
+ 						
+ 				//Zoom to artifact if it is double clicked in the bottom grid
+				trenchResults.on('rowdblclick', function(){
+            		var totalBounds;
+                	trenchResults.getSelectionModel().each(function(rec){
+                		trenchFeature = rec.get("feature");
+                		trenchesLayer.addFeatures([trenchFeature]);
+	            		map.setCenter(new OpenLayers.LonLat(trenchFeature.geometry.getCentroid().x,trenchFeature.geometry.getCentroid().y),18);
+					});
+     			});
+  
+				var resultsTabs = new Ext.TabPanel({
+    				region: "center",
+        			activeTab: 0
+            		});
+            		
+				resultsTabs.add(artifactResults);
+				resultsTabs.add(trenchResults);
+				
+				var resultsPanel = new Ext.Panel({
+					title: 'Search Results',
+					layout: 'border',
+					region: 'east',
+					buttonAlign: "left",
+					width: 325,
+					collapsible: true,
+					items:[resultsTabs]
+				});
+			    			
+    		
+    			    			
+    			resultsPanel.addButton({
+    	  			text: "Add A Feature To The Map",
+       				handler: function() {
+       					if (resultsTabs.getActiveTab().title == "Artifacts" && mappedFeaturesTabs.getActiveTab().title != "Artifacts"){
+       						mappedFeaturesTabs.setActiveTab(0);
+       					}
+       					else if (resultsTabs.getActiveTab().title == "Trenches" && mappedFeaturesTabs.getActiveTab().title != "Trenches"){
+       						mappedFeaturesTabs.setActiveTab(1)
+       					}
+       					if (resultsTabs.getActiveTab().title == "Artifacts"){
+        					artifactResults.getSelectionModel().each(function(rec) {
+            					var feature = rec.get("feature");
+            					artifactsLayer.addFeatures([feature]);
+							})
+						}
+						else if (resultsTabs.getActiveTab().title == "Trenches"){
+        					trenchResults.getSelectionModel().each(function(rec) {
+            					var feature = rec.get("feature");
+            					trenchesLayer.addFeatures([feature]);
+							})
+						}
+        			},
+   		 			scope: resultsPanel
+				});
+
+				resultsPanel.addButton({
+    	  			text: "Add all",
+       				handler: function() {
+       					if (resultsTabs.getActiveTab().title == "Artifacts" && mappedFeaturesTabs.getActiveTab().title != "Artifacts"){
+       						mappedFeaturesTabs.setActiveTab(0);
+       					}
+       					else if (resultsTabs.getActiveTab().title == "Trenches" && mappedFeaturesTabs.getActiveTab().title != "Trenches"){
+       						mappedFeaturesTabs.setActiveTab(1)
+       					}
+       					if (resultsTabs.getActiveTab().title == "Artifacts"){ 
+       						var rows = artifactResults.getStore().getCount( );
+       						for (var i = 0; i < rows; i++){
+       						var featadd = artifactAttStore.getAt(i);
+       							var feature = featadd.get("feature");
+            					artifactsLayer.addFeatures([feature]);
+            				}
+            			}
+            			else if (resultsTabs.getActiveTab().title == "Trenches"){
+        					var rows = trenchResults.getStore().getCount( );
+       						for (var i = 0; i < rows; i++){
+       						var featadd = trenchAttStore.getAt(i);
+       							var feature = featadd.get("feature");
+            					trenchesLayer.addFeatures([feature]);
+            				}
+        				}},
+    				scope: resultsPanel
+				});
+    			//Add if statement to differentiate between two grids
+    			resultsPanel.on('rowdblclick', function(g, rowIdx,r){
+    				if (resultsTabs.getActiveTab().title == "Artifacts"){
+    				
+            			rec = artifactAttStore.getAt(rowIdx);
+                		var feature = rec.get("feature");
+            			artifactsLayer.addFeatures([feature]);
+    				}
+    			    else if (resultsTabs.getActiveTab().title == "Trenches"){
+            			rec = trenchAttStore.getAt(rowIdx);
+                		var feature = rec.get("feature");
+            			trenchLayer.addFeatures([feature]);
+    				}
+    			});
+    			
+    			var artifactResultsCount;
+    			artifactResultsCount = new Ext.form.TextField({
+		      		value: "Total Artifacts Found:   ",
+		      		width: 200,
+		      		readOnly: true
+		    	});
+		    	artifactResults.add(artifactResultsCount);
+		    	
+		    	var trenchResultsCount;
+    			trenchResultsCount = new Ext.form.TextField({
+		      		value: "Total Trenches Found:   ",
+		      		width: 200,
+		      		readOnly: true
+		      		
+		    	});
+		    	trenchResults.add(trenchResultsCount);		 
+/*******************************************************************************************************************/
+				
+				
+							
+			
+/******MAIN WINDOW THAT HOUSES ALL OF THE COMPONENTS OF THE APPLICATIONS**************************************/
+	
+				//Add all of the components to the main window and set up default options
+				var mainWin = new Ext.Window({
+        			title: "Poggio Civitate Archaeological Project Mapper",
+             		resizable: true,
+        			maximizable: true,
+        			constrain: true,
+        			height: 700,
+        			width: 1200,
+        			layout: "border",
+        			items: [mapPanel, resultsPanel, mappedFeatures, queryPanel]
+    			});
+    
+    			mainWin.show();
+    			//maximize window
+    			mainWin.maximize();
+
+/***********************************************************************************************************/
+    			
+/********COMMENTED OUT CODE************************************************************************************/
+    			//var rulesDef = [];
+    			
+    			/*for (var i = 0; i < rules.length; i++){
+				rulesDef.push(rules[i].filter.value)
+			}
+			//so we do not have to worry about alphabetizing while coding
+			rulesDef.sort();
+			//this double array gets the features ready for a store below
+			for ( var i = 0, c = rulesDef.length; i < c; i++ ) {
+    			rulesDef[i] = [rulesDef[i]];
+			}
+			*/
+	
+			//fields from the database that will be used in the applications
+			
+			//Reads features from the artifact store-- Maybe I dont need this anymore?
+			//var reader = new GeoExt.data.FeatureReader({}, artifactFields);
+
+			
+
+/* vgridPanelBase.addButton({
+    text: 'Hide All Features',
+    handler: function(toggled){
+        if (toggled) {
+        
+        for (var i = 0; i < cities.features.length; i++)
+        {
+        cities.features[i].renderIntent = "hidden";
+        cities.features[i].style = OpenLayers.Feature.Vector.style["delete"];
+        cities.drawFeature(cities.features[i]);
+        }
+          for (var i = 0; i < timeArry.length; i++)
+        {
+        timeArry[i].setChecked(false);
+        timeContainer[i].dispT = false;
+        }
+        } //end of toggled 
+        else {
+            length.deactivate();
+        }
+    }
+});
+  
+        
+
+ 
+ 
+ 
+        
+        
+                
+vgridPanelBase.addButton({
+    text: 'Make Map Numbers',
+    handler: function(toggled){
+        if (toggled) {
+        makeMapNumbers(cities, vectorstore);
+} 
+        else {
+            length.deactivate();
+        }
+    }
+});
+
+
+        
+        */
+
+
+ /*      
+      		bottom.addButton(new Ext.ux.Exporter.Button({
+          		component: bottom,
+          		text: "Export grid as .xls"
+        	}));
+    		
+    		
+    		
+    
+ */   		
+	/*
+	
+	//Create a container with the layers from the map panel
+				var layerList = new GeoExt.tree.LayerContainer({
+    				text: 'Selectable Layers',
+    				layerStore: mapPanel.layers,
+    				leaf: false,
+    				expanded: true,
+     			});
+
+				//load those layers in the tree
+				var layerTree = new Ext.tree.TreePanel({
+    				text: "Map Layers",
+    				title: 'Map Layers',
+    				root: layerList,
+    				enableDD: true,
+    				width: 100,
+    				height: 200,
+    				autoScroll: true,
+    				collapsible: true,
+    				//collapsed: true,
+    				region: 'south'
+    			});
+*/
+	
+			
+	});
+	    
+/********************************************************************************************************/
+	               
+	    </script>
+ 	</head>
+	<body onload>
+	</body>
+</html>
